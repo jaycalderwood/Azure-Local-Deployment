@@ -1,0 +1,74 @@
+# New NSG - creates or updates an Azure Local network security group from a rule preset, and can
+# attach it to a logical network. Attach to a single VM's NIC from the New VM form instead.
+
+trigger: none
+pr: none
+
+name: nsg-$(Date:yyyyMMdd)$(Rev:.r)
+
+parameters:
+  - name: existingNsg
+    displayName: NSG to update, or (new) to create one
+    type: string
+    default: (new)
+    values:
+      - (new)
+      # AUTO:nsgs:BEGIN
+      - nsg-infra
+      # AUTO:nsgs:END
+  - name: newNsgName
+    displayName: Name for the new NSG (when (new) is selected; no "windows"/"microsoft"/"azure" in names)
+    type: string
+    default: nsg-server-baseline
+  - name: ruleSet
+    displayName: Rules to apply
+    type: string
+    default: "Windows-Server-Baseline (RDP, ping, WinRM from management; deny other inbound)"
+    values:
+      - "Windows-Server-Baseline (RDP, ping, WinRM from management; deny other inbound)"
+      - "Web-Server (baseline + HTTP/HTTPS from anywhere)"
+      - "Domain-Controller (baseline + DNS, Kerberos, LDAP, SMB/RPC, NTP)"
+      - "Allow-Subnet-Only (everything from management; deny other inbound)"
+      - "Deny-All-Inbound (outbound only)"
+      - "None (create empty / keep existing rules)"
+  - name: managementCidr
+    displayName: Management source allowed in (CIDR)
+    type: string
+    default: 10.1.10.0/24
+  - name: attachToLogicalNetwork
+    displayName: Attach this NSG to a logical network (affects every VM on it)
+    type: string
+    default: (none)
+    values:
+      - (none)
+      # AUTO:lnets:BEGIN
+      - cluster-infra-lnet
+      - ccsln
+      # AUTO:lnets:END
+  - name: confirmInUse
+    displayName: I understand existing VMs on that logical network get these rules immediately
+    type: boolean
+    default: false
+
+variables:
+  - group: azlocal-secrets
+  - template: vars/azlocal.yml
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+  - template: templates/preview-and-deploy.yml
+    parameters:
+      title: NSG
+      serviceConnection: sc-azlocal-infra
+      script: scripts/pipeline/new-nsg.sh
+      syncDropdownsAfter: true
+      timeoutInMinutes: 30
+      env:
+        P_EXISTING: ${{ parameters.existingNsg }}
+        P_NEW_NAME: ${{ parameters.newNsgName }}
+        P_RULESET: ${{ parameters.ruleSet }}
+        P_MGMT_CIDR: ${{ parameters.managementCidr }}
+        P_ATTACH_LNET: ${{ parameters.attachToLogicalNetwork }}
+        P_CONFIRM_IN_USE: ${{ parameters.confirmInUse }}

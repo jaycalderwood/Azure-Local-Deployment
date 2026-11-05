@@ -1,0 +1,115 @@
+# New AVD Hosts - Azure Virtual Desktop session hosts on Azure Local.
+# Creates the host pool / desktop app group / workspace when (new) is chosen, then builds N session
+# hosts that join the domain and register with the host pool.
+
+trigger: none
+pr: none
+
+name: avd-${{ parameters.namePrefix }}-$(Date:yyyyMMdd)$(Rev:.r)
+
+parameters:
+  - name: hostPool
+    displayName: Host pool (or (new) to create one)
+    type: string
+    default: (new)
+    values:
+      - (new)
+      # AUTO:hostpools:BEGIN
+      # AUTO:hostpools:END
+  - name: newHostPoolName
+    displayName: New host pool name (when (new) is selected)
+    type: string
+    default: hp-azurelocal
+  - name: hostPoolType
+    displayName: Host pool type (new pools only)
+    type: string
+    default: Pooled
+    values: [Pooled, Personal]
+  - name: maxSessions
+    displayName: Max users per host (Pooled, new pools only)
+    type: number
+    default: 5
+  - name: sessionHosts
+    displayName: Number of session hosts to add
+    type: number
+    default: 1
+    values: [1, 2, 3, 4, 5]
+  - name: namePrefix
+    displayName: Host name prefix (max 11 chars; hosts become PREFIX-01, PREFIX-02 ...)
+    type: string
+    default: AVD
+  - name: image
+    displayName: Image (use a Windows 11 multi-session image for Pooled)
+    type: string
+    default: win11  # AUTO:images
+    values:
+      # AUTO:images:BEGIN
+      - server2025
+      - win11
+      # AUTO:images:END
+  - name: processors
+    displayName: vCPUs per host
+    type: number
+    default: 4
+    values: [2, 4, 8, 16]
+  - name: memoryGB
+    displayName: Memory per host (GB)
+    type: number
+    default: 16
+    values: [8, 16, 32, 64]
+  - name: logicalNetwork
+    displayName: Logical network
+    type: string
+    default: ccsln  # AUTO:lnets
+    values:
+      # AUTO:lnets:BEGIN
+      - cluster-infra-lnet
+      - ccsln
+      # AUTO:lnets:END
+  - name: attachNsg
+    displayName: Attach a network security group to each host's NIC
+    type: boolean
+    default: false
+  - name: nsg
+    displayName: Network security group (used when the box above is ticked)
+    type: string
+    default: (none)
+    values:
+      - (none)
+      # AUTO:nsgs:BEGIN
+      - nsg-infra
+      # AUTO:nsgs:END
+  - name: disableIPv6
+    displayName: Turn off IPv6
+    type: boolean
+    default: true
+
+variables:
+  - group: azlocal-secrets
+  - template: vars/azlocal.yml
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+  - template: templates/preview-and-deploy.yml
+    parameters:
+      title: AVD hosts ${{ parameters.namePrefix }}
+      serviceConnection: sc-azlocal-vms
+      script: scripts/pipeline/new-avd.sh
+      syncDropdownsAfter: true
+      timeoutInMinutes: 150
+      env:
+        P_HOSTPOOL: ${{ parameters.hostPool }}
+        P_NEW_HOSTPOOL: ${{ parameters.newHostPoolName }}
+        P_POOL_TYPE: ${{ parameters.hostPoolType }}
+        P_MAX_SESSIONS: ${{ parameters.maxSessions }}
+        P_COUNT: ${{ parameters.sessionHosts }}
+        P_PREFIX: ${{ parameters.namePrefix }}
+        P_IMAGE: ${{ parameters.image }}
+        P_CPU: ${{ parameters.processors }}
+        P_MEMGB: ${{ parameters.memoryGB }}
+        P_LNET: ${{ parameters.logicalNetwork }}
+        P_ATTACH_NSG: ${{ parameters.attachNsg }}
+        P_NSG: ${{ parameters.nsg }}
+        P_IPV6: ${{ parameters.disableIPv6 }}

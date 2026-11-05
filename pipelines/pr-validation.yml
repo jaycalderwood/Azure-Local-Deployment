@@ -1,0 +1,39 @@
+# PR validation: build + what-if only, never deploys.
+# Azure Repos: Project settings > Repos > main > Branch policies > Build validation > this pipeline.
+# GitHub repos: the 'pr' trigger below is honored.
+
+trigger: none
+pr:
+  branches:
+    include: [main]
+
+variables:
+  - group: azlocal-secrets
+  - name: infraServiceConnection
+    value: sc-azlocal-infra
+  - name: vmServiceConnection
+    value: sc-azlocal-vms
+  - name: infraResourceGroup
+    value: Infrastructure
+  - name: vmResourceGroup
+    value: Infrastructure
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  - checkout: self
+  - template: templates/deploy-bicep.yml
+    parameters:
+      serviceConnection: $(infraServiceConnection)
+      resourceGroup: $(infraResourceGroup)
+      parametersFile: params/infra.bicepparam
+      deploymentName: pr-azl-infra
+      mode: whatif
+  - template: templates/deploy-bicep.yml
+    parameters:
+      serviceConnection: $(vmServiceConnection)
+      resourceGroup: $(vmResourceGroup)
+      parametersFile: params/vms.bicepparam
+      deploymentName: pr-azl-vms
+      mode: whatif

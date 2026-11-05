@@ -1,0 +1,106 @@
+# New VM - Pipelines > New VM > Run pipeline > fill in the form > Run.
+# Each VM gets its own local admin password in Key Vault: vm-<name>-admin
+# Dropdowns marked AUTO are refreshed by the "Sync Dropdowns" pipeline.
+
+trigger: none
+pr: none
+
+name: newvm-${{ parameters.vmName }}-$(Date:yyyyMMdd)$(Rev:.r)
+
+parameters:
+  - name: vmName
+    displayName: VM name (max 15 characters, letters/numbers/hyphens)
+    type: string
+  - name: image
+    displayName: Image
+    type: string
+    default: server2025  # AUTO:images
+    values:
+      # AUTO:images:BEGIN
+      - server2025
+      - win11
+      # AUTO:images:END
+  - name: processors
+    displayName: vCPUs
+    type: number
+    default: 2
+    values: [1, 2, 4, 8, 16]
+  - name: memoryGB
+    displayName: Memory (GB)
+    type: number
+    default: 8
+    values: [2, 4, 8, 16, 32, 64]
+  - name: dataDiskGB
+    displayName: Data disk size in GB (0 = none)
+    type: number
+    default: 0
+  - name: logicalNetwork
+    displayName: Logical network
+    type: string
+    default: ccsln  # AUTO:lnets
+    values:
+      # AUTO:lnets:BEGIN
+      - cluster-infra-lnet
+      - ccsln
+      # AUTO:lnets:END
+  - name: ipAddress
+    displayName: IP address ('auto' = next free address in the logical network's pool)
+    type: string
+    default: auto
+  - name: attachNsg
+    displayName: Attach a network security group to the NIC
+    type: boolean
+    default: false
+  - name: nsg
+    displayName: Network security group (used when the box above is ticked)
+    type: string
+    default: (none)
+    values:
+      - (none)
+      # AUTO:nsgs:BEGIN
+      - nsg-infra
+      # AUTO:nsgs:END
+  - name: joinDomain
+    displayName: Join contoso.com
+    type: boolean
+    default: true
+  - name: enableRdp
+    displayName: Turn on Remote Desktop (and allow ping)
+    type: boolean
+    default: true
+  - name: disableIPv6
+    displayName: Turn off IPv6
+    type: boolean
+    default: true
+  - name: showPassword
+    displayName: Show the admin password on the run summary (anyone who can view this run can see it)
+    type: boolean
+    default: false
+
+variables:
+  - group: azlocal-secrets
+  - template: vars/azlocal.yml
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+  - template: templates/preview-and-deploy.yml
+    parameters:
+      title: VM ${{ parameters.vmName }}
+      serviceConnection: sc-azlocal-vms
+      script: scripts/pipeline/new-vm.sh
+      env:
+        P_NAME: ${{ parameters.vmName }}
+        P_IMAGE: ${{ parameters.image }}
+        P_CPU: ${{ parameters.processors }}
+        P_MEMGB: ${{ parameters.memoryGB }}
+        P_DISKGB: ${{ parameters.dataDiskGB }}
+        P_LNET: ${{ parameters.logicalNetwork }}
+        P_IP: ${{ parameters.ipAddress }}
+        P_ATTACH_NSG: ${{ parameters.attachNsg }}
+        P_NSG: ${{ parameters.nsg }}
+        P_JOIN: ${{ parameters.joinDomain }}
+        P_RDP: ${{ parameters.enableRdp }}
+        P_IPV6: ${{ parameters.disableIPv6 }}
+        P_SHOW_PW: ${{ parameters.showPassword }}

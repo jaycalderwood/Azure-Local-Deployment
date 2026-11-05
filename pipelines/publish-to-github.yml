@@ -1,0 +1,76 @@
+# Publish to GitHub - pushes a SCRUBBED snapshot of main to the public repo
+#   https://github.com/jaycalderwood/Azure-Local-Deployment
+# Real IDs/domains are replaced using publish/scrub-map.json (never published), a leak check blocks the
+# push if anything identifying or secret is left, and only the snapshot goes out - not Azure Repos history.
+# The scrubbed files are always attached to the run as the 'public-preview' artifact so you can review them.
+
+trigger:
+  branches:
+    include: [main]
+pr: none
+
+schedules:
+  - cron: "0 5 * * *"
+    displayName: Nightly (picks up Sync Dropdowns commits, which use [skip ci])
+    branches:
+      include: [main]
+    always: false
+
+parameters:
+  - name: dryRun
+    displayName: Dry run - build and check the scrubbed copy, but don't push to GitHub
+    type: boolean
+    default: false
+
+variables:
+  - group: github-publish          # GITHUB_TOKEN (secret): fine-grained PAT, Contents read/write on the repo
+  - name: GITHUB_REPO
+    value: github.com/jaycalderwood/Azure-Local-Deployment
+  - name: PUBLIC_DIR
+    value: $(Agent.TempDirectory)/public
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  - checkout: self
+    fetchDepth: 1
+
+  - bash: python3 scripts/publish/export_public.py --map publish/scrub-map.json --out "$(PUBLIC_DIR)"
+    displayName: Scrub + leak check
+
+  - task: PublishPipelineArtifact@1
+    displayName: Attach scrubbed copy (public-preview)
+    inputs:
+      targetPath: $(PUBLIC_DIR)
+      artifact: public-preview
+
+  - ${{ if not(parameters.dryRun) }}:
+      - bash: |
+          set -euo pipefail
+          GH="$(Agent.TempDirectory)/github"
+          rm -rf "$GH"
+          git clone -q "https://pat:${GH_TOKEN}@${GITHUB_REPO}.git" "$GH"
+          cd "$GH"
+          if git rev-parse -q --verify origin/main >/dev/null; then
+            git checkout -q -B main origin/main      # keep GitHub's existing history
+          else
+            git checkout -q --orphan main            # empty repo: start it
+          fi
+
+          # Mirror the scrubbed tree; keep files that only live on GitHub (LICENSE, .github/)
+          find . -mindepth 1 -maxdepth 1 ! -name .git ! -name LICENSE ! -name .github -exec rm -rf {} +
+          cp -a "$(PUBLIC_DIR)/." ./
+
+          git add -A
+          if git diff --cached --quiet; then
+            echo "GitHub is already up to date."
+            exit 0
+          fi
+          git -c user.name="Jay Calderwood" -c user.email="jaycalderwood@users.noreply.github.com" \
+            commit -q -m "Publish from Azure DevOps ($(echo "$(Build.SourceVersion)" | cut -c1-7))"
+          git push -q origin main
+          echo "Published: https://${GITHUB_REPO}"
+        displayName: Push to GitHub
+        env:
+          GH_TOKEN: $(GITHUB_TOKEN)

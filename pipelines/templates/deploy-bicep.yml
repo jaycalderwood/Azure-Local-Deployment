@@ -1,0 +1,46 @@
+# Reusable step template: validate / what-if / deploy a .bicepparam file to a resource group.
+parameters:
+  - name: serviceConnection
+    type: string
+  - name: resourceGroup
+    type: string
+  - name: parametersFile          # path to .bicepparam (it names its own template via 'using')
+    type: string
+  - name: deploymentName
+    type: string
+  - name: mode                    # validate | whatif | deploy
+    type: string
+    default: deploy
+    values: [validate, whatif, deploy]
+
+steps:
+  - task: AzureCLI@2
+    displayName: "${{ parameters.mode }}: ${{ parameters.deploymentName }}"
+    inputs:
+      azureSubscription: ${{ parameters.serviceConnection }}
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        set -euo pipefail
+        az config set bicep.use_binary_from_path=false --only-show-errors
+        az bicep install --only-show-errors || az bicep upgrade --only-show-errors
+
+        NAME="${{ parameters.deploymentName }}-$(Build.BuildId)"
+        COMMON=(--resource-group "${{ parameters.resourceGroup }}" --name "$NAME" --parameters "${{ parameters.parametersFile }}")
+
+        case "${{ parameters.mode }}" in
+          validate)
+            az deployment group validate "${COMMON[@]}" --output none
+            echo "Validation passed."
+            ;;
+          whatif)
+            az deployment group what-if "${COMMON[@]}" --result-format FullResourcePayloads
+            ;;
+          deploy)
+            az deployment group create "${COMMON[@]}" --output table
+            ;;
+        esac
+    env:
+      # Secret variables are NOT exposed to scripts automatically - map them explicitly.
+      VM_ADMIN_PASSWORD: $(vmAdminPassword)
+      DOMAIN_JOIN_PASSWORD: $(domainJoinPassword)

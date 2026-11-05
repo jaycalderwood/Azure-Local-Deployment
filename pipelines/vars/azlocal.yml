@@ -1,0 +1,26 @@
+# Shared values for every Azure Local pipeline. Scripts see them as environment variables.
+variables:
+  - name: AZL_RG
+    value: Infrastructure
+  - name: AZL_LOCATION
+    value: eastus
+  - name: AZL_CUSTOM_LOCATION_ID
+    value: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/Infrastructure/providers/Microsoft.ExtendedLocation/customLocations/my-custom-location
+  - name: AZL_KEYVAULT
+    value: kv-azlocal-demo
+  - name: AZL_STORAGE_PATH
+    value: UserStorage1-00000000000000000000000000000000
+  - name: AZL_VM_SWITCH
+    value: ConvergedSwitch(compute_management)
+  - name: AZL_ADMIN_USER
+    value: azladmin
+  - name: AZL_DOMAIN
+    value: contoso.com
+  - name: AZL_DOMAIN_OU
+    value: OU=AzureLocal,DC=contoso,DC=com
+  - name: AZL_DOMAIN_JOIN_USER
+    value: svc-domainjoin
+  - name: AZL_DNS
+    value: 10.1.10.10
+  - name: AZL_MGMT_CIDR
+    value: 10.1.10.0/24

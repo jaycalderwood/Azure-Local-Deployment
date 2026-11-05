@@ -1,0 +1,81 @@
+# New Logical Network - creates an Azure Local logical network (a VLAN/subnet VMs can attach to).
+# After it finishes, Sync Dropdowns runs so the new network shows up in the other forms.
+
+trigger: none
+pr: none
+
+name: lnet-${{ parameters.lnetName }}-$(Date:yyyyMMdd)$(Rev:.r)
+
+parameters:
+  - name: lnetName
+    displayName: Logical network name
+    type: string
+  - name: allocation
+    displayName: IP allocation (Static = Azure Local hands out IPs from the pool; Dynamic = your DHCP server)
+    type: string
+    default: Static
+    values: [Static, Dynamic]
+  - name: addressPrefix
+    displayName: Subnet (Static only), e.g. 10.1.20.0/24
+    type: string
+    default: 10.1.20.0/24
+  - name: gateway
+    displayName: Default gateway (Static only)
+    type: string
+    default: 10.1.20.1
+  - name: poolStart
+    displayName: First IP for VMs (Static only)
+    type: string
+    default: 10.1.20.100
+  - name: poolEnd
+    displayName: Last IP for VMs (Static only)
+    type: string
+    default: 10.1.20.199
+  - name: dnsServers
+    displayName: DNS servers, comma-separated
+    type: string
+    default: 10.1.10.10
+  - name: vlanId
+    displayName: VLAN ID (0 = untagged)
+    type: number
+    default: 0
+  - name: vmSwitch
+    displayName: Hyper-V switch ('default' = ConvergedSwitch(compute_management))
+    type: string
+    default: default
+  - name: nsg
+    displayName: Network security group for the whole network
+    type: string
+    default: (none)
+    values:
+      - (none)
+      # AUTO:nsgs:BEGIN
+      - nsg-infra
+      # AUTO:nsgs:END
+
+variables:
+  - group: azlocal-secrets
+  - template: vars/azlocal.yml
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+  - template: templates/preview-and-deploy.yml
+    parameters:
+      title: Logical network ${{ parameters.lnetName }}
+      serviceConnection: sc-azlocal-infra
+      script: scripts/pipeline/new-lnet.sh
+      syncDropdownsAfter: true
+      timeoutInMinutes: 30
+      env:
+        P_NAME: ${{ parameters.lnetName }}
+        P_ALLOC: ${{ parameters.allocation }}
+        P_PREFIX: ${{ parameters.addressPrefix }}
+        P_GATEWAY: ${{ parameters.gateway }}
+        P_POOL_START: ${{ parameters.poolStart }}
+        P_POOL_END: ${{ parameters.poolEnd }}
+        P_DNS: ${{ parameters.dnsServers }}
+        P_VLAN: ${{ parameters.vlanId }}
+        P_SWITCH: ${{ parameters.vmSwitch }}
+        P_NSG: ${{ parameters.nsg }}

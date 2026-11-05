@@ -1,0 +1,66 @@
+# New AKS Cluster - AKS enabled by Azure Arc on Azure Local.
+# Needs a Static logical network with enough free pool IPs: control plane + workers + 2.
+
+trigger: none
+pr: none
+
+name: aks-${{ parameters.clusterName }}-$(Date:yyyyMMdd)$(Rev:.r)
+
+parameters:
+  - name: clusterName
+    displayName: Cluster name (lowercase letters, numbers, hyphens)
+    type: string
+  - name: adminGroupObjectId
+    displayName: Entra group object ID for cluster admins (add yourself to it)
+    type: string
+  - name: logicalNetwork
+    displayName: Logical network (must be Static)
+    type: string
+    default: ccsln  # AUTO:lnets
+    values:
+      # AUTO:lnets:BEGIN
+      - cluster-infra-lnet
+      - ccsln
+      # AUTO:lnets:END
+  - name: controlPlaneCount
+    displayName: Control plane nodes
+    type: number
+    default: 1
+    values: [1, 3]
+  - name: nodeCount
+    displayName: Worker nodes
+    type: number
+    default: 1
+    values: [1, 2, 3, 4, 5]
+  - name: nodeVmSize
+    displayName: Worker VM size
+    type: string
+    default: Standard_A4_v2
+    values: [Standard_A4_v2, Standard_D4s_v3, Standard_D8s_v3, Standard_K8S3_v1]
+  - name: kubernetesVersion
+    displayName: Kubernetes version ('default' = latest supported)
+    type: string
+    default: default
+
+variables:
+  - group: azlocal-secrets
+  - template: vars/azlocal.yml
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+  - template: templates/preview-and-deploy.yml
+    parameters:
+      title: AKS ${{ parameters.clusterName }}
+      serviceConnection: sc-azlocal-infra
+      script: scripts/pipeline/new-aks.sh
+      timeoutInMinutes: 180
+      env:
+        P_NAME: ${{ parameters.clusterName }}
+        P_ADMIN_GROUP: ${{ parameters.adminGroupObjectId }}
+        P_LNET: ${{ parameters.logicalNetwork }}
+        P_CP_COUNT: ${{ parameters.controlPlaneCount }}
+        P_NODE_COUNT: ${{ parameters.nodeCount }}
+        P_NODE_SIZE: ${{ parameters.nodeVmSize }}
+        P_K8S_VERSION: ${{ parameters.kubernetesVersion }}

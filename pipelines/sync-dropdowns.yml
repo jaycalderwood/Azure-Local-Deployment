@@ -1,0 +1,33 @@
+# Sync Dropdowns - refreshes the AUTO dropdown lists (logical networks, NSGs, images, host pools)
+# in the form pipelines from what exists in Azure, and commits the change to main.
+# Runs: every 6 hours or on demand. New Logical Network / New NSG / New AVD Hosts also refresh the
+# dropdowns themselves as their last step.
+
+trigger: none
+pr: none
+
+schedules:
+  - cron: "0 */6 * * *"
+    displayName: Every 6 hours
+    branches:
+      include: [main]
+    always: true
+
+
+variables:
+  - group: azlocal-secrets
+  - template: vars/azlocal.yml
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  - checkout: self
+    persistCredentials: true
+    fetchDepth: 0
+  - template: templates/run-script.yml
+    parameters:
+      serviceConnection: sc-azlocal-vms
+      script: scripts/pipeline/sync-dropdowns.sh
+      mode: run
+      displayName: Sync dropdowns

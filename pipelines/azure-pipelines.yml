@@ -1,0 +1,136 @@
+# Azure Local - infrastructure + VM deployment pipeline
+# Runs on Microsoft-hosted agents: everything goes through Azure Resource Manager,
+# so the agent never needs network line-of-sight to the cluster.
+
+trigger:
+  branches:
+    include: [main]
+  paths:
+    include: [bicep/*, params/*, pipelines/*]
+
+pr: none   # Azure Repos: use a branch policy with pipelines/pr-validation.yml instead
+
+parameters:
+  - name: deployInfra
+    displayName: Deploy logical networks / images / storage paths
+    type: boolean
+    default: true
+  - name: deployVMs
+    displayName: Deploy VMs
+    type: boolean
+    default: true
+
+variables:
+  # Variable group linked to Key Vault; secrets: vmAdminPassword, domainJoinPassword
+  - group: azlocal-secrets
+  - name: infraServiceConnection
+    value: sc-azlocal-infra        # identity has "Azure Stack HCI Administrator" on Infrastructure
+  - name: vmServiceConnection
+    value: sc-azlocal-vms          # identity has "Azure Stack HCI VM Contributor"
+  - name: infraResourceGroup
+    value: Infrastructure
+  - name: vmResourceGroup
+    value: Infrastructure        # or a separate workload RG, e.g. rg-azlocal-vms
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+  # ---------------------------------------------------------------- Validate
+  - stage: Validate
+    displayName: Build & what-if
+    jobs:
+      - job: Lint
+        displayName: Bicep build
+        steps:
+          - checkout: self
+          - task: AzureCLI@2
+            displayName: Build all Bicep + params
+            inputs:
+              azureSubscription: $(vmServiceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+                az bicep install --only-show-errors || true
+                for f in bicep/*.bicep bicep/modules/*.bicep; do
+                  echo "== $f"; az bicep build --file "$f" --stdout > /dev/null
+                done
+                for p in params/*.bicepparam; do
+                  echo "== $p"; az bicep build-params --file "$p" --stdout > /dev/null
+                done
+            env:
+              VM_ADMIN_PASSWORD: placeholder-for-build
+              DOMAIN_JOIN_PASSWORD: placeholder-for-build
+
+      - job: WhatIf
+        displayName: What-if
+        dependsOn: Lint
+        steps:
+          - checkout: self
+          - ${{ if parameters.deployInfra }}:
+              - template: templates/deploy-bicep.yml
+                parameters:
+                  serviceConnection: $(infraServiceConnection)
+                  resourceGroup: $(infraResourceGroup)
+                  parametersFile: params/infra.bicepparam
+                  deploymentName: azl-infra
+                  mode: whatif
+          - ${{ if parameters.deployVMs }}:
+              - template: templates/deploy-bicep.yml
+                parameters:
+                  serviceConnection: $(vmServiceConnection)
+                  resourceGroup: $(vmResourceGroup)
+                  parametersFile: params/vms.bicepparam
+                  deploymentName: azl-vms
+                  mode: whatif
+
+  # ---------------------------------------------------------------- Infra
+  - stage: Infra
+    displayName: Networks / images / storage
+    dependsOn: Validate
+    condition: and(succeeded(), ${{ parameters.deployInfra }})
+    jobs:
+      - deployment: DeployInfra
+        displayName: Deploy cluster-shared resources
+        environment: azlocal-prod        # add an Approval check on this environment
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self         # deployment jobs don't check out automatically
+                - template: templates/deploy-bicep.yml
+                  parameters:
+                    serviceConnection: $(infraServiceConnection)
+                    resourceGroup: $(infraResourceGroup)
+                    parametersFile: params/infra.bicepparam
+                    deploymentName: azl-infra
+                    mode: deploy
+
+  # ---------------------------------------------------------------- VMs
+  - stage: VMs
+    displayName: Virtual machines
+    dependsOn: [Validate, Infra]
+    condition: >-
+      and(
+        eq(dependencies.Validate.result, 'Succeeded'),
+        in(dependencies.Infra.result, 'Succeeded', 'Skipped'),
+        ${{ parameters.deployVMs }}
+      )
+    jobs:
+      - deployment: DeployVMs
+        displayName: Deploy Azure Local VMs
+        environment: azlocal-prod
+        timeoutInMinutes: 120            # image copy + guest provisioning + domain join can be slow
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                - template: templates/deploy-bicep.yml
+                  parameters:
+                    serviceConnection: $(vmServiceConnection)
+                    resourceGroup: $(vmResourceGroup)
+                    parametersFile: params/vms.bicepparam
+                    deploymentName: azl-vms
+                    mode: deploy

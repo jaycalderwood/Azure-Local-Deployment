@@ -1,0 +1,32 @@
+# Runs one of scripts/pipeline/*.sh with Azure CLI signed in as the given service connection.
+parameters:
+  - name: serviceConnection
+    type: string
+  - name: script
+    type: string
+  - name: mode
+    type: string
+    values: [whatif, deploy, run]
+  - name: displayName
+    type: string
+  - name: env
+    type: object
+    default: {}
+  - name: continueOnError
+    type: boolean
+    default: false
+
+steps:
+  - task: AzureCLI@2
+    displayName: ${{ parameters.displayName }}
+    continueOnError: ${{ parameters.continueOnError }}
+    inputs:
+      azureSubscription: ${{ parameters.serviceConnection }}
+      scriptType: bash
+      scriptLocation: scriptPath
+      scriptPath: ${{ parameters.script }}
+      workingDirectory: $(Build.SourcesDirectory)
+    env:
+      MODE: ${{ parameters.mode }}
+      DOMAIN_JOIN_PASSWORD: $(domainJoinPassword)   # secret from the Key Vault variable group
+      ${{ insert }}: ${{ parameters.env }}

@@ -1,0 +1,63 @@
+# Two stages for every "form" pipeline:
+#   Preview - validates the form and shows the what-if (no changes)
+#   Deploy  - waits for approval on the azlocal-prod environment, then makes the change
+parameters:
+  - name: title
+    type: string
+  - name: serviceConnection
+    type: string
+  - name: script
+    type: string
+  - name: env
+    type: object
+    default: {}
+  - name: timeoutInMinutes
+    type: number
+    default: 120
+  - name: syncDropdownsAfter
+    type: boolean
+    default: false
+
+stages:
+  - stage: Preview
+    displayName: Preview - ${{ parameters.title }}
+    jobs:
+      - job: Preview
+        steps:
+          - checkout: self
+          - template: run-script.yml
+            parameters:
+              serviceConnection: ${{ parameters.serviceConnection }}
+              script: ${{ parameters.script }}
+              mode: whatif
+              displayName: Validate + what-if
+              env: ${{ parameters.env }}
+
+  - stage: Deploy
+    displayName: Deploy - ${{ parameters.title }}
+    dependsOn: Preview
+    jobs:
+      - deployment: Deploy
+        environment: azlocal-prod
+        timeoutInMinutes: ${{ parameters.timeoutInMinutes }}
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                  persistCredentials: true     # lets the dropdown refresh push to main
+                - template: run-script.yml
+                  parameters:
+                    serviceConnection: ${{ parameters.serviceConnection }}
+                    script: ${{ parameters.script }}
+                    mode: deploy
+                    displayName: Deploy
+                    env: ${{ parameters.env }}
+                - ${{ if parameters.syncDropdownsAfter }}:
+                    - template: run-script.yml
+                      parameters:
+                        serviceConnection: ${{ parameters.serviceConnection }}
+                        script: scripts/pipeline/sync-dropdowns.sh
+                        mode: run
+                        displayName: Refresh form dropdowns
+                        continueOnError: true   # a failed refresh never fails the deployment
