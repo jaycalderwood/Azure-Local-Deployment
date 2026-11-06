@@ -42,6 +42,8 @@ parameters:
       # AUTO:lnets:BEGIN
       - cluster-infra-lnet
       - ccsln
+      - Test1105
+      - Test1105-1
       # AUTO:lnets:END
   - name: ipAddress
     displayName: IP address ('auto' = next free address in the logical network's pool)
