@@ -76,6 +76,7 @@ module vm 'modules/vm.bicep' = [
       dnsServers: v.?dnsServers ?? dnsServers
       disableIPv6: v.?disableIPv6 ?? false
       enableRdp: v.?enableRdp ?? true
+      installSshExtension: v.?sshExtension ?? false
       tags: union(tags, v.?tags ?? {})
     }
   }

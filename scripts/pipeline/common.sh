@@ -87,4 +87,10 @@ print(json.dumps($expr))" | azl params "$out"
 
 SUMMARY_FILE="$TMPD/summary-$RANDOM.md"
 summary()        { printf '%s\n' "$*" >> "$SUMMARY_FILE"; }
-publish_summary(){ [ -s "$SUMMARY_FILE" ] && echo "##vso[task.uploadsummary]$SUMMARY_FILE"; return 0; }
+# publish_summary [title]: shows on the run page's Extensions tab, under the title (file name)
+publish_summary(){
+  [ -s "$SUMMARY_FILE" ] || return 0
+  local f="$SUMMARY_FILE"
+  if [ -n "${1:-}" ]; then f="$TMPD/$(printf %s "$1" | tr -c 'A-Za-z0-9._-' '_').md"; cp "$SUMMARY_FILE" "$f"; fi
+  echo "##vso[task.uploadsummary]$f"
+}

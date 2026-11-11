@@ -9,6 +9,7 @@
   azl.py next-index <rg> <prefix>       -> next free N for machines named <prefix>-NN
   azl.py nics-on   <rg> <lnetId>        -> JSON list of NIC names attached to that logical network
   azl.py nic-ip    <rg> <nicName>       -> IP address of a NIC ("pending" if none yet)
+  azl.py image-os  <rg> <image>         -> Windows / Linux (from the image's osType)
   azl.py params    <outfile>            -> reads a JSON object on stdin, writes an ARM parameters file
 """
 import json
@@ -123,6 +124,14 @@ def main(argv):
                 pr = ipc.get("properties") or {}
                 ip = pr.get("privateIPAddress") or pr.get("privateIpAddress") or ip
         print(ip or "pending")
+    elif cmd == "image-os":
+        rg, name = a
+        r = find(rg, "image", name)
+        if not r:
+            sys.stderr.write(f"image '{name}' not found\n")
+            return 2
+        os_type = ((show(r["id"]) or {}).get("properties") or {}).get("osType") or "Windows"
+        print("Linux" if os_type.lower() == "linux" else "Windows")
     elif cmd == "params":
         (outfile,) = a
         values = json.load(sys.stdin)

@@ -1,5 +1,8 @@
 # New VM - Pipelines > New VM > Run pipeline > fill in the form > Run.
+# Windows or Linux: the OS comes from the image you pick.
 # Each VM gets its own local admin password in Key Vault: vm-<name>-admin
+# Results (IP, user, password or where to find it) are at the end of the Deploy log and on the run's
+# Extensions tab - written even if a later step such as the domain join fails.
 # Dropdowns marked AUTO are refreshed by the "Sync Dropdowns" pipeline.
 
 trigger: none
@@ -9,10 +12,10 @@ name: newvm-${{ parameters.vmName }}-$(Date:yyyyMMdd)$(Rev:.r)
 
 parameters:
   - name: vmName
-    displayName: VM name (max 15 characters, letters/numbers/hyphens)
+    displayName: VM name (letters/numbers/hyphens; Windows max 15, Linux max 54)
     type: string
   - name: image
-    displayName: Image
+    displayName: Image (Windows or Linux - the VM's OS follows the image)
     type: string
     default: server2025  # AUTO:images
     values:
@@ -42,7 +45,6 @@ parameters:
       # AUTO:lnets:BEGIN
       - cluster-infra-lnet
       - ccsln
-      - Test1105-1
       # AUTO:lnets:END
   - name: ipAddress
     displayName: IP address ('auto' = next free address in the logical network's pool)
@@ -62,19 +64,31 @@ parameters:
       - nsg-infra
       # AUTO:nsgs:END
   - name: joinDomain
-    displayName: Join contoso.com
+    displayName: Join contoso.com (Windows only - ignored for Linux)
     type: boolean
     default: true
   - name: enableRdp
-    displayName: Turn on Remote Desktop (and allow ping)
+    displayName: Turn on remote access (Windows - RDP + ping, Linux - SSH)
     type: boolean
     default: true
   - name: disableIPv6
     displayName: Turn off IPv6
     type: boolean
     default: true
+  - name: installSshExtension
+    displayName: Install the Azure Arc SSH extension (connect with az ssh arc; Windows gets OpenSSH for Windows)
+    type: boolean
+    default: false
+  - name: sshPublicKey
+    displayName: Linux only - SSH public key for azladmin (paste the .pub contents, or 'none')
+    type: string
+    default: none
+  - name: secureBoot
+    displayName: Secure Boot (untick only for unsigned Linux images that won't boot)
+    type: boolean
+    default: true
   - name: showPassword
-    displayName: Show the admin password on the run summary (anyone who can view this run can see it)
+    displayName: Show the local admin password in the run results (anyone who can view this run can see it)
     type: boolean
     default: false
 
@@ -104,4 +118,7 @@ stages:
         P_JOIN: ${{ parameters.joinDomain }}
         P_RDP: ${{ parameters.enableRdp }}
         P_IPV6: ${{ parameters.disableIPv6 }}
+        P_SSH_EXT: ${{ parameters.installSshExtension }}
+        P_SSH_KEY: ${{ parameters.sshPublicKey }}
+        P_SECURE_BOOT: ${{ parameters.secureBoot }}
         P_SHOW_PW: ${{ parameters.showPassword }}

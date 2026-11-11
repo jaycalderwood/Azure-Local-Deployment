@@ -4,7 +4,8 @@ targetScope = 'resourceGroup'
 param location string = resourceGroup().location
 param customLocationId string
 
-@maxLength(15)
+@description('Windows: max 15 characters (checked by the pipeline). Linux: max 54 (Arc machine name limit).')
+@maxLength(54)
 param name string
 param processors int = 2
 param memoryMB int = 8192
@@ -39,6 +40,20 @@ param dnsServers array = []
 param disableIPv6 bool = false
 param enableRdp bool = true
 
+@allowed([
+  'Windows'
+  'Linux'
+])
+param osType string = 'Windows'
+
+@description('Linux only: SSH public key; empty = password only')
+param sshPublicKey string = ''
+
+param secureBoot bool = true
+
+@description('Azure Arc SSH extension (Windows) / make sure sshd is on (Linux)')
+param installSshExtension bool = false
+
 param tags object = {}
 
 module vm 'modules/vm.bicep' = {
@@ -64,6 +79,10 @@ module vm 'modules/vm.bicep' = {
     dnsServers: dnsServers
     disableIPv6: disableIPv6
     enableRdp: enableRdp
+    osType: osType
+    sshPublicKey: sshPublicKey
+    secureBootEnabled: secureBoot
+    installSshExtension: installSshExtension
     tags: tags
   }
 }

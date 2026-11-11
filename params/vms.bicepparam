@@ -34,12 +34,23 @@ param tags = {
 // Removing a VM from this list does NOT delete it.
 // After a VM exists, its NIC settings (IP, DNS, network, NSG) can't change - only CPU/memory/disks.
 //
-// Example:
-//   {
-//     name: 'APP01'
+// Examples:
+//   {                                   // Windows (default osType)
+//     name: 'APP01'                     // Windows: max 15 characters
 //     processors: 4
 //     memoryMB: 8192
 //     disableIPv6: true
 //     dataDisksGB: [ 64 ]
 //   }
+//   {                                   // Linux
+//     name: 'ubuntu-web-01'             // Linux: max 54 characters
+//     osType: 'Linux'
+//     image: '<your Linux image name>'  // e.g. the Ubuntu image you added to the cluster
+//     sshPublicKey: 'ssh-ed25519 AAAA... you@pc'   // optional; password sign-in also works
+//     domainJoin: false                 // domain join is Windows-only
+//     disableIPv6: true
+//   }
+// enableRdp (default true) means RDP + ping on Windows and SSH on Linux.
+// sshExtension: true installs the OpenSSH for Windows - Azure Arc extension (Windows) so you can
+// connect with: az ssh arc --resource-group Infrastructure --name <vm> --local-user azladmin
 param vms = []

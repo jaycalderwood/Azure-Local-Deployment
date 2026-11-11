@@ -25,6 +25,7 @@ export HP
 export LNET_ID IMAGE_ID SP_ID NSG_ID=""
 LNET_ID="$(azl resolve "$AZL_RG" lnet "$P_LNET")"
 IMAGE_ID="$(azl resolve "$AZL_RG" image "$P_IMAGE")"
+[ "$(azl image-os "$AZL_RG" "$P_IMAGE")" = "Windows" ] || fail "AVD session hosts need a Windows image (ideally Windows 11 multi-session); $P_IMAGE is Linux."
 SP_ID="$(azl resolve "$AZL_RG" storage "$AZL_STORAGE_PATH")"
 if is_true "$P_ATTACH_NSG"; then
   [ "$P_NSG" != "(none)" ] || fail "'Attach an NSG' is ticked but no NSG was chosen."
@@ -113,4 +114,4 @@ summary "az role assignment create --role \"Desktop Virtualization User\" --assi
 summary '```'
 summary ""
 summary "Users then connect with the Windows App / Remote Desktop client or https://windows.cloud.microsoft."
-publish_summary
+publish_summary "$HP"

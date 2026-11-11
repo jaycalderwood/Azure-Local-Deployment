@@ -21,7 +21,6 @@ parameters:
       # AUTO:lnets:BEGIN
       - cluster-infra-lnet
       - ccsln
-      - Test1105-1
       # AUTO:lnets:END
   - name: controlPlaneCount
     displayName: Control plane nodes

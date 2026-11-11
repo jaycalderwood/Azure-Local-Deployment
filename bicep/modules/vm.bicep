@@ -1,8 +1,9 @@
-// One Azure Local VM: Arc machine + NIC + data disks + VM instance + optional AD domain join
-metadata description = 'Deploys a single Azure Local VM enabled by Azure Arc.'
+// One Azure Local VM (Windows or Linux): Arc machine + NIC + data disks + VM instance
+// + guest configuration (remote access / IPv6 / AVD agent) + optional AD domain join (Windows)
+metadata description = 'Deploys a single Azure Local VM enabled by Azure Arc (Windows or Linux).'
 
-@description('VM name. Used for the Arc machine resource and the guest computer name (max 15 chars for Windows).')
-@maxLength(15)
+@description('VM name. Used for the Arc machine resource and the guest computer name. Windows: max 15 characters (checked by the pipeline); Linux: max 54 (Arc machine name limit).')
+@maxLength(54)
 param name string
 
 param location string
@@ -44,10 +45,10 @@ param adminUsername string
 @secure()
 param adminPassword string
 
-@description('Linux only: SSH public key. If set, password auth is disabled.')
+@description('Linux only: SSH public key for adminUsername. Password sign-in stays enabled as well.')
 param sshPublicKey string = ''
 
-@description('Gen2 secure boot. Turn off for Linux images that are not signed.')
+@description('Gen2 secure boot. Marketplace Windows and Ubuntu images are signed; turn off for unsigned Linux images that will not boot.')
 param secureBootEnabled bool = true
 param enableTPM bool = true
 
@@ -66,11 +67,14 @@ param domainJoinPassword string = ''
 @description('DNS servers set on the NIC. Domain join needs these to point at a domain controller.')
 param dnsServers array = []
 
-@description('Windows only: unbind IPv6 from all adapters and set DisabledComponents=0xFF (runs before domain join).')
+@description('Turn off IPv6. Windows: unbind it and set DisabledComponents=0xFF (runs before domain join). Linux: sysctl, persistent.')
 param disableIPv6 bool = false
 
-@description('Windows only: turn on Remote Desktop and open its firewall rules (plus ICMP echo) in every profile.')
+@description('Remote access. Windows: turn on Remote Desktop and open its firewall rules plus ICMP echo. Linux: make sure SSH is enabled and running.')
 param enableRdp bool = true
+
+@description('Azure Arc SSH: Windows gets the OpenSSH for Windows - Azure Arc extension; Linux uses its own sshd (made sure it is enabled). Connect with: az ssh arc --resource-group <rg> --name <vm> --local-user <user>')
+param installSshExtension bool = false
 
 @description('Resource ID of an Azure Local network security group to attach to the NIC. Empty = none.')
 param nsgId string = ''
@@ -87,7 +91,8 @@ var extendedLocation = {
 }
 
 var isWindows = osType == 'Windows'
-var useSsh = !isWindows && !empty(sshPublicKey)
+var isLinux = !isWindows
+var useSsh = isLinux && !empty(sshPublicKey)
 
 // ---------- Arc machine (the parent "VM" resource you see in the portal) ----------
 resource machine 'Microsoft.HybridCompute/machines@2023-10-03-preview' = {
@@ -166,7 +171,7 @@ var linuxOsProfile = {
     {
       provisionVMAgent: true
       provisionVMConfigAgent: true
-      disablePasswordAuthentication: useSsh
+      disablePasswordAuthentication: false   // password + optional SSH key (CLI: --authentication-type all)
     },
     useSsh
       ? {
@@ -255,6 +260,7 @@ resource domainJoin 'Microsoft.HybridCompute/machines/extensions@2023-10-03-prev
   dependsOn: [
     vm
     guestConfig // RDP / IPv6 / AVD agent first; the domain-join reboot then makes the IPv6 change stick
+    openSsh     // extensions on one machine run one at a time: guest script -> OpenSSH -> domain join
   ]
 }
 
@@ -301,6 +307,55 @@ resource guestConfig 'Microsoft.HybridCompute/machines/extensions@2023-10-03-pre
   }
   dependsOn: [
     vm
+  ]
+}
+
+// ---------- Guest configuration (Linux): SSH, IPv6 ----------
+// Linux counterpart of the script above, run by the Linux Custom Script extension through the Arc agent.
+var linuxSshSteps = [
+  '(systemctl enable --now ssh || systemctl enable --now sshd) >/dev/null 2>&1 || true'
+]
+var linuxIpv6Steps = [
+  'printf \'net.ipv6.conf.all.disable_ipv6 = 1\\nnet.ipv6.conf.default.disable_ipv6 = 1\\nnet.ipv6.conf.lo.disable_ipv6 = 1\\n\' > /etc/sysctl.d/99-disable-ipv6.conf'
+  'sysctl -p /etc/sysctl.d/99-disable-ipv6.conf >/dev/null'
+]
+var linuxSteps = concat((enableRdp || installSshExtension) ? linuxSshSteps : [], disableIPv6 ? linuxIpv6Steps : [])
+var runLinuxGuestConfig = isLinux && !empty(linuxSteps)
+
+resource linuxGuestConfig 'Microsoft.HybridCompute/machines/extensions@2023-10-03-preview' = if (runLinuxGuestConfig) {
+  parent: machine
+  name: 'CustomScript'
+  location: location
+  properties: {
+    publisher: 'Microsoft.Azure.Extensions'
+    type: 'CustomScript'
+    typeHandlerVersion: '2.1'
+    autoUpgradeMinorVersion: true
+    protectedSettings: {
+      commandToExecute: '/bin/sh -c "${join(linuxSteps, '; ')}"'
+    }
+  }
+  dependsOn: [
+    vm
+  ]
+}
+
+// ---------- Optional: Azure Arc SSH (Windows) ----------
+// 'OpenSSH for Windows - Azure Arc' installs and enables sshd so you can connect with az ssh arc
+// (no inbound port or public IP needed). Windows Server 2025 already ships OpenSSH; the extension configures it.
+resource openSsh 'Microsoft.HybridCompute/machines/extensions@2023-10-03-preview' = if (isWindows && installSshExtension) {
+  parent: machine
+  name: 'WindowsOpenSSH'
+  location: location
+  properties: {
+    publisher: 'Microsoft.Azure.OpenSSH'
+    type: 'WindowsOpenSSH'
+    typeHandlerVersion: '3.0.1.0'
+    autoUpgradeMinorVersion: true
+  }
+  dependsOn: [
+    vm
+    guestConfig
   ]
 }
 
