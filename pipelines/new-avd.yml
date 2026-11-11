@@ -15,6 +15,7 @@ parameters:
     values:
       - (new)
       # AUTO:hostpools:BEGIN
+      - CCSAVDHP
       # AUTO:hostpools:END
   - name: newHostPoolName
     displayName: New host pool name (when (new) is selected)
@@ -44,6 +45,7 @@ parameters:
     default: win11  # AUTO:images
     values:
       # AUTO:images:BEGIN
+      - LNX01
       - server2025
       - win11
       # AUTO:images:END
@@ -65,6 +67,7 @@ parameters:
       # AUTO:lnets:BEGIN
       - cluster-infra-lnet
       - ccsln
+      - Test1105-1
       # AUTO:lnets:END
   - name: attachNsg
     displayName: Attach a network security group to each host's NIC

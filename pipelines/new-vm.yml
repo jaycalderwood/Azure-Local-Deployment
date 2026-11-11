@@ -20,6 +20,7 @@ parameters:
     default: server2025  # AUTO:images
     values:
       # AUTO:images:BEGIN
+      - LNX01
       - server2025
       - win11
       # AUTO:images:END
@@ -45,6 +46,7 @@ parameters:
       # AUTO:lnets:BEGIN
       - cluster-infra-lnet
       - ccsln
+      - Test1105-1
       # AUTO:lnets:END
   - name: ipAddress
     displayName: IP address ('auto' = next free address in the logical network's pool)
